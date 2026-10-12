@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Administrator Dashboard</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            color: #111;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 18px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #777;
+            margin-bottom: 30px;
+        }
+
+        .menu {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .menu button {
+            padding: 18px;
+            background: #111;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .menu button:hover {
+            background: #333;
+        }
+
+        h2 {
+            margin-top: 10px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #111;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background: #f8f8f8;
+        }
+
+        .message {
+            text-align: center;
+            padding: 20px;
+            color: #777;
+        }
+
+        .logout {
+            width: 100%;
+            padding: 13px;
+            margin-top: 30px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .logout:hover {
+            background: #f0f0f0;
+        }
+
+        @media (max-width: 700px) {
+            .menu {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <div class="card">
+
+            <h1>Administrator Dashboard</h1>
+
+            <p class="subtitle">
+                Manage the Barangay Documents Request System
+            </p>
+
+
+            <!-- Admin Menu -->
+
+            <div class="menu">
+
+                <button onclick="showUsers()">
+                    Manage Users
+                </button>
+
+                <button onclick="showRequests()">
+                    Manage Requests
+                </button>
+
+                <button onclick="showRecords()">
+                    View Records
+                </button>
+
+                <button onclick="showReports()">
+                    View Reports
+                </button>
+
+            </div>
+
+
+            <!-- Content Area -->
+
+            <div id="content">
+
+                <h2>System Management</h2>
+
+                <p class="message">
+                    Select an option above to manage the system.
+                </p>
+
+            </div>
+
+
+            <button
+                class="logout"
+                onclick="location.href='login.html'">
+                Logout
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- Supabase -->
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+
+
+    <script>
+
+        const content =
+            document.getElementById("content");
+
+
+        async function showUsers() {
+
+            content.innerHTML = `
+                <h2>Manage Users</h2>
+
+                <div class="table-container">
+
+                    <table>
+
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Full Name</th>
+                                <th>Email</th>
+                                <th>Contact Number</th>
+                                <th>Role</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="userTable">
+
+                            <tr>
+                                <td colspan="5" class="message">
+                                    Loading users...
+                                </td>
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+            `;
+
+
+            const {
+                data: users,
+                error
+            } = await supabaseClient
+                .from("users")
+                .select("*")
+                .order("created_at", {
+                    ascending: false
+                });
+
+
+            if (error) {
+
+                document.getElementById("userTable").innerHTML = `
+                    <tr>
+                        <td colspan="5" class="message">
+                            Failed to load users.
+                        </td>
+                    </tr>
+                `;
+
+                alert("Error: " + error.message);
+
+                return;
+            }
+
+
+            if (!users || users.length === 0) {
+
+                document.getElementById("userTable").innerHTML = `
+                    <tr>
+                        <td colspan="5" class="message">
+                            No users found.
+                        </td>
+                    </tr>
+                `;
+
+                return;
+            }
+
+
+            const table =
+                document.getElementById("userTable");
+
+            table.innerHTML = "";
+
+
+            users.forEach(function(user) {
+
+                const row =
+                    document.createElement("tr");
+
+
+                row.innerHTML = `
+                    <td>${user.id}</td>
+                    <td>${user.full_name || "-"}</td>
+                    <td>${user.email || "-"}</td>
+                    <td>${user.contact_number || "-"}</td>
+                    <td>${user.role || "Resident"}</td>
+                `;
+
+
+                table.appendChild(row);
+
+            });
+
+        }
+
+
+        function showRequests() {
+
+            content.innerHTML = `
+
+                <h2>Manage Requests</h2>
+
+                <p class="message">
+                    Request management is available in the Staff Dashboard.
+                </p>
+
+                <button
+                    onclick="location.href='staff-dashboard.html'">
+                    Open Staff Dashboard
+                </button>
+
+            `;
+
+        }
+
+
+        async function showRecords() {
+
+            content.innerHTML = `
+
+                <h2>View Records</h2>
+
+                <div class="table-container">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+                                <th>ID</th>
+                                <th>Resident</th>
+                                <th>Document</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="recordTable">
+
+                            <tr>
+                                <td colspan="5" class="message">
+                                    Loading records...
+                                </td>
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            `;
+
+
+            const {
+                data: records,
+                error
+            } = await supabaseClient
+                .from("document_requests")
+                .select("*")
+                .order("created_at", {
+                    ascending: false
+                });
+
+
+            if (error) {
+
+                alert("Error: " + error.message);
+
+                return;
+            }
+
+
+            const table =
+                document.getElementById("recordTable");
+
+            table.innerHTML = "";
+
+
+            if (!records || records.length === 0) {
+
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="message">
+                            No records found.
+                        </td>
+                    </tr>
+                `;
+
+                return;
+            }
+
+
+            records.forEach(function(record) {
+
+                const row =
+                    document.createElement("tr");
+
+
+                row.innerHTML = `
+                    <td>${record.id}</td>
+                    <td>${record.resident_name || "-"}</td>
+                    <td>${record.document_type || "-"}</td>
+                    <td>${record.status || "Pending"}</td>
+                    <td>${record.request_date || "-"}</td>
+                `;
+
+
+                table.appendChild(row);
+
+            });
+
+        }
+
+
+        async function showReports() {
+
+            content.innerHTML = `
+
+                <h2>View Reports</h2>
+
+                <p>
+                    Loading request summary...
+                </p>
+
+                <div id="reportData">
+                    Please wait...
+                </div>
+
+            `;
+
+
+            const {
+                data: requests,
+                error
+            } = await supabaseClient
+                .from("document_requests")
+                .select("status");
+
+
+            if (error) {
+
+                alert("Error: " + error.message);
+
+                return;
+            }
+
+
+            let pending = 0;
+            let approved = 0;
+            let rejected = 0;
+
+
+            requests.forEach(function(request) {
+
+                if (request.status === "Pending") {
+                    pending++;
+                }
+
+                else if (request.status === "Approved") {
+                    approved++;
+                }
+
+                else if (request.status === "Rejected") {
+                    rejected++;
+                }
+
+            });
+
+
+            document.getElementById("reportData").innerHTML = `
+
+                <table>
+
+                    <tr>
+                        <th>Status</th>
+                        <th>Total</th>
+                    </tr>
+
+                    <tr>
+                        <td>Pending</td>
+                        <td>${pending}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Approved</td>
+                        <td>${approved}</td>
+                    </tr>
+
+                    <tr>
+                        <td>Rejected</td>
+                        <td>${rejected}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Total Requests</th>
+                        <th>${requests.length}</th>
+                    </tr>
+
+                </table>
+
+            `;
+
+        }
+
+    </script>
+
+</body>
+</html>

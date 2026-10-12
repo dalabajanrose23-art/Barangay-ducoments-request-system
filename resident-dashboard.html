@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resident Dashboard</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f6f8;
+            color: #111;
+        }
+
+        .header {
+            background: #111;
+            color: white;
+            padding: 25px 20px;
+        }
+
+        .header-content {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .header p {
+            margin: 8px 0 0;
+            color: #d6d6d6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 35px auto;
+            padding: 0 20px;
+        }
+
+        .welcome {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            border: 1px solid #ddd;
+        }
+
+        .welcome h2 {
+            margin: 0 0 8px;
+            font-size: 24px;
+        }
+
+        .welcome p {
+            margin: 0;
+            color: #666;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 16px;
+            padding: 25px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        .icon {
+            width: 55px;
+            height: 55px;
+            background: #111;
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            margin-bottom: 18px;
+        }
+
+        .card h3 {
+            margin: 0 0 8px;
+            font-size: 20px;
+        }
+
+        .card p {
+            margin: 0;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .card button {
+            width: 100%;
+            margin-top: 20px;
+            padding: 13px;
+            background: #111;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .card button:hover { background: #333; }
+
+        .logout {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .logout button {
+            padding: 12px 30px;
+            background: white;
+            color: #111;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .logout button:hover { background: #eee; }
+
+        #profileMessage {
+            color: #a12626;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 650px) {
+            .cards { grid-template-columns: 1fr; }
+            .header h1 { font-size: 24px; }
+            .container { margin-top: 25px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>Barangay Documents Request System</h1>
+            <p>Resident Dashboard</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="welcome">
+            <h2 id="welcomeMessage">Loading resident profile...</h2>
+            <p>Manage your barangay document requests easily.</p>
+            <p id="profileMessage" role="alert"></p>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <div class="icon">📄</div>
+                <h3>Request Document</h3>
+                <p>
+                    Submit a request for a barangay document
+                    such as Barangay Clearance or Certificate.
+                </p>
+                <button onclick="location.href='request.html'">
+                    Request Document
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="icon">📋</div>
+                <h3>Check Request Status</h3>
+                <p>
+                    View the current status and remarks
+                    of your submitted document requests.
+                </p>
+                <button onclick="location.href='status.html'">
+                    Check Status
+                </button>
+            </div>
+        </div>
+
+        <div class="logout">
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+
+    <script>
+    async function loadResident() {
+        const welcome = document.getElementById("welcomeMessage");
+        const message = document.getElementById("profileMessage");
+
+        try {
+            const { data: { user }, error: authError } =
+                await supabaseClient.auth.getUser();
+
+            if (authError) throw authError;
+
+            if (!user) {
+                window.location.replace("login.html");
+                return;
+            }
+
+            const { data: profile, error: profileError } =
+                await supabaseClient
+                    .from("users")
+                    .select("full_name, role, auth_user_id")
+                    .eq("auth_user_id", user.id)
+                    .maybeSingle();
+
+            if (profileError) {
+                console.error("Profile lookup failed:", profileError);
+                message.textContent =
+                    "Unable to load your profile. Please try again.";
+                welcome.textContent = "Welcome, Resident!";
+                return;
+            }
+
+            if (!profile) {
+                console.error(
+                    "No profile found for authenticated user ID:",
+                    user.id
+                );
+
+                welcome.textContent = "Welcome, Resident!";
+                message.textContent =
+                    "Your profile is not linked yet. Please contact " +
+                    "the system administrator to fix the account link.";
+                return;
+            }
+
+            if (profile.role !== "Resident") {
+                welcome.textContent = "Access restricted";
+                message.textContent =
+                    "This dashboard is for resident accounts only.";
+                return;
+            }
+
+            welcome.textContent =
+                "Welcome, " + (profile.full_name || "Resident") + "!";
+            message.textContent = "";
+
+        } catch (error) {
+            console.error("Dashboard error:", error);
+            welcome.textContent = "Welcome, Resident!";
+            message.textContent =
+                "Unable to verify your account. Please log in again.";
+        }
+    }
+
+    async function logout() {
+        const { error } = await supabaseClient.auth.signOut();
+
+        if (error) {
+            alert("Logout failed: " + error.message);
+            return;
+        }
+
+        window.location.replace("login.html");
+    }
+
+    loadResident();
+    </script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Barangay Login</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #ffffff;
+            color: #111111;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 520px;
+            margin: 50px auto;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .login-icon {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 25px;
+            background: #111111;
+            color: white;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 38px;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin: 0 0 10px;
+        }
+
+        .subtitle {
+            color: #777777;
+            font-size: 18px;
+            margin-bottom: 35px;
+        }
+
+        .login-card {
+            border: 1px solid #dddddd;
+            border-radius: 20px;
+            padding: 35px;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid #dddddd;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #111111;
+        }
+
+        .password-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .password-label a {
+            color: #555555;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: #111111;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 17px;
+            cursor: pointer;
+        }
+
+        .login-btn:hover {
+            background: #333333;
+        }
+
+        .register-text {
+            margin-top: 30px;
+            color: #777777;
+        }
+
+        .register-text a {
+            color: #111111;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        @media (max-width: 600px) {
+            .login-container {
+                margin: 25px auto;
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 30px;
+            }
+
+            .login-card {
+                padding: 25px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-container">
+
+        <div class="login-icon">↪</div>
+
+        <h1>Welcome back</h1>
+
+        <p class="subtitle">
+            Log in to your account
+        </p>
+
+
+        <div class="login-card">
+
+            <form id="loginForm">
+
+                <label for="email">
+                    Email
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    placeholder="you@example.com"
+                    required
+                >
+
+
+                <div class="password-label">
+
+                    <label for="password">
+                        Password
+                    </label>
+
+                    <a href="#">
+                        Forgot password?
+                    </a>
+
+                </div>
+
+
+                <input
+                    type="password"
+                    id="password"
+                    placeholder="••••••••"
+                    required
+                >
+
+
+                <button
+                    type="submit"
+                    class="login-btn">
+
+                    Log in
+
+                </button>
+
+            </form>
+
+        </div>
+
+
+        <p class="register-text">
+
+            Don't have an account?
+
+            <a href="register.html">
+                Create one
+            </a>
+
+        </p>
+
+    </div>
+
+
+    <!-- Supabase -->
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script src="supabase.js"></script>
+
+
+    <!-- Login Function -->
+
+    <script>
+
+        document
+            .getElementById("loginForm")
+            .addEventListener("submit", async function(event) {
+
+                event.preventDefault();
+
+
+                const email =
+                    document.getElementById("email").value.trim();
+
+                const password =
+                    document.getElementById("password").value;
+
+
+
+                const {
+                    data,
+                    error
+                } = await supabaseClient.auth.signInWithPassword({
+
+                    email: email,
+
+                    password: password
+
+                });
+
+
+                if (error) {
+
+                    alert(error.message);
+
+                    return;
+
+                }
+
+
+                const {
+                    data: userProfile,
+                    error: profileError
+                } = await supabaseClient
+                    .from("users")
+                    .select("role")
+                    .eq("email", email)
+                    .maybeSingle();
+
+
+                if (profileError) {
+
+                    alert(
+                        "Login successful, but user role could not be loaded: "
+                        + profileError.message
+                    );
+
+                    return;
+
+                }
+
+
+                if (!userProfile) {
+
+                    alert(
+                        "Login successful, but no user profile was found."
+                    );
+
+                    return;
+
+                }
+
+
+                const role =
+                    userProfile.role;
+
+
+                alert("Login successful!");
+
+
+
+                if (role === "Resident") {
+
+                    window.location.href =
+                        "resident-dashboard.html";
+
+                }
+
+                else if (role === "Staff") {
+
+                    window.location.href =
+                        "staff-dashboard.html";
+
+                }
+
+                else if (role === "Administrator") {
+
+                    window.location.href =
+                        "admin-dashboard.html";
+
+                }
+
+                else {
+
+                    alert(
+                        "Invalid user role. Please contact the administrator."
+                    );
+
+                }
+
+            });
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request Status</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            color: #111;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 18px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 { text-align: center; margin-bottom: 10px; }
+
+        .subtitle {
+            text-align: center;
+            color: #777;
+            margin-bottom: 30px;
+        }
+
+        .table-container { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            min-width: 1100px;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 14px;
+            border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+
+        th {
+            background: #111;
+            color: white;
+            white-space: nowrap;
+        }
+
+        tr:nth-child(even) { background: #f8f8f8; }
+
+        .status { font-weight: bold; }
+
+        .back-btn {
+            width: 100%;
+            padding: 13px;
+            margin-top: 25px;
+            background: white;
+            color: #111;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .back-btn:hover { background: #f0f0f0; }
+
+        .message {
+            text-align: center;
+            padding: 20px;
+            color: #777;
+        }
+
+        .download-btn {
+            background: #176b45;
+            color: white;
+            padding: 10px 13px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .download-btn:hover { background: #125637; }
+
+        .download-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .file-status {
+            color: #777;
+            font-size: 13px;
+        }
+
+        .resident-photo {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: block;
+        }
+
+        .photo-note {
+            color: #777;
+            font-size: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .container { margin: 15px auto; padding: 10px; }
+            .card { padding: 18px 12px; }
+            h1 { font-size: 23px; }
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <div class="card">
+        <h1>My Document Requests</h1>
+
+        <p class="subtitle">
+            View the details and status of your document requests
+            and download completed certificates
+        </p>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Document Type</th>
+                        <th>2×2 ID Picture</th>
+                        <th>Full Name</th>
+                        <th>Sex</th>
+                        <th>Nationality</th>
+                        <th>Age</th>
+                        <th>Date of Birth</th>
+                        <th>Civil Status</th>
+                        <th>Contact Number</th>
+                        <th>Complete Address</th>
+                        <th>Purpose</th>
+                        <th>Request Date</th>
+                        <th>Status</th>
+                        <th>Remarks</th>
+                        <th>Certificate</th>
+                    </tr>
+                </thead>
+
+                <tbody id="requestTable">
+                    <tr>
+                        <td colspan="15" class="message">
+                            Loading requests...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <button
+            class="back-btn"
+            type="button"
+            onclick="location.href='resident-dashboard.html'">
+            Back to Dashboard
+        </button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./supabase.js"></script>
+
+<script>
+const table = document.getElementById("requestTable");
+
+const CERTIFICATE_BUCKET = "completed-documents";
+const PHOTO_BUCKET = "resident-photos";
+const TOTAL_COLUMNS = 15;
+
+function addCell(row, value, className = "") {
+    const cell = document.createElement("td");
+
+    cell.textContent =
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+            ? String(value)
+            : "-";
+
+    if (className) {
+        cell.className = className;
+    }
+
+    row.appendChild(cell);
+    return cell;
+}
+
+function showTableMessage(message) {
+    table.replaceChildren();
+
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+
+    cell.colSpan = TOTAL_COLUMNS;
+    cell.className = "message";
+    cell.textContent = message;
+
+    row.appendChild(cell);
+    table.appendChild(row);
+}
+
+async function getResidentPhotoUrl(photoPath) {
+    if (!photoPath) {
+        return null;
+    }
+
+    // Allow a complete image URL if one was saved.
+    if (/^https?:\/\//i.test(photoPath)) {
+        return photoPath;
+    }
+
+    // Generate a temporary URL for a private Storage image.
+    const { data, error } = await supabaseClient
+        .storage
+        .from(PHOTO_BUCKET)
+        .createSignedUrl(photoPath, 3600);
+
+    if (error) {
+        console.error("Resident photo error:", error);
+        return null;
+    }
+
+    return data?.signedUrl || null;
+}
+
+async function displayResidentPhoto(cell, request) {
+    const photoPath =
+        request.id_picture_url ||
+        request.resident_photo_path ||
+        null;
+
+    if (!photoPath) {
+        cell.textContent = "No picture uploaded";
+        cell.className = "photo-note";
+        return;
+    }
+
+    cell.textContent = "Loading picture...";
+
+    try {
+        const photoUrl = await getResidentPhotoUrl(photoPath);
+
+        cell.replaceChildren();
+
+        if (!photoUrl) {
+            cell.textContent = "Picture unavailable";
+            cell.className = "photo-note";
+            return;
+        }
+
+        const image = document.createElement("img");
+        image.src = photoUrl;
+        image.alt = "Resident 2×2 ID picture";
+        image.className = "resident-photo";
+
+        image.onerror = function() {
+            cell.textContent = "Unable to display picture";
+            cell.className = "photo-note";
+        };
+
+        cell.appendChild(image);
+
+    } catch (error) {
+        console.error("Unable to display resident picture:", error);
+        cell.textContent = "Picture unavailable";
+        cell.className = "photo-note";
+    }
+}
+
+async function downloadCertificate(request, button) {
+    if (!request.document_file_path) {
+        alert("The certificate has not been uploaded yet.");
+        return;
+    }
+
+    if (String(request.status || "").toLowerCase() !== "approved") {
+        alert("The certificate is available only for approved requests.");
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Preparing...";
+
+    try {
+        const { data: sessionData, error: sessionError } =
+            await supabaseClient.auth.getSession();
+
+        if (sessionError) throw sessionError;
+
+        if (!sessionData.session) {
+            alert("Please log in first.");
+            window.location.href = "login.html";
+            return;
+        }
+
+        const { data, error } = await supabaseClient
+            .storage
+            .from(CERTIFICATE_BUCKET)
+            .createSignedUrl(
+                request.document_file_path,
+                300,
+                { download: true }
+            );
+
+        if (error) throw error;
+
+        if (!data || !data.signedUrl) {
+            throw new Error("Supabase did not return a download link.");
+        }
+
+        window.location.assign(data.signedUrl);
+
+    } catch (error) {
+        console.error("Certificate download error:", error);
+
+        let message =
+            "Unable to download the certificate: " +
+            (error.message || "Unknown error.");
+
+        if (
+            error.message &&
+            /row-level security|security policy|403|not allowed/i.test(
+                error.message
+            )
+        ) {
+            message +=
+                "\n\nPlease check the SELECT policy for the private " +
+                "completed-documents Storage bucket.";
+        }
+
+        alert(message);
+        button.disabled = false;
+        button.textContent = "Download Certificate";
+    }
+}
+
+async function loadRequests() {
+    showTableMessage("Loading requests...");
+
+    try {
+        const { data: sessionData, error: sessionError } =
+            await supabaseClient.auth.getSession();
+
+        if (sessionError) throw sessionError;
+
+        if (!sessionData.session) {
+            alert("Please log in first.");
+            window.location.href = "login.html";
+            return;
+        }
+
+        const currentUser = sessionData.session.user;
+
+        // Load the logged-in resident's profile as a fallback
+        // if the name or contact number was not saved in the request.
+        let profile = {};
+
+        const { data: profileData, error: profileError } =
+            await supabaseClient
+                .from("users")
+                .select("full_name, contact_number")
+                .eq("auth_user_id", currentUser.id)
+                .maybeSingle();
+
+        if (profileError) {
+            console.warn("Resident profile could not be loaded:", profileError);
+        } else if (profileData) {
+            profile = profileData;
+        }
+
+        // Only retrieve requests belonging to this resident.
+        const { data: requests, error } = await supabaseClient
+            .from("document_requests")
+            .select("*")
+            .eq("auth_user_id", currentUser.id)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (!requests || requests.length === 0) {
+            showTableMessage("You have no document requests yet.");
+            return;
+        }
+
+        table.replaceChildren();
+
+        requests.forEach(function(request) {
+            const row = document.createElement("tr");
+
+            // Document type
+            addCell(row, request.document_type);
+
+            // Resident 2×2 picture
+            const photoCell = document.createElement("td");
+            row.appendChild(photoCell);
+            displayResidentPhoto(photoCell, request);
+
+            // Personal information
+            addCell(
+                row,
+                request.full_name ||
+                request.resident_name ||
+                profile.full_name
+            );
+
+            addCell(row, request.sex);
+            addCell(row, request.nationality);
+            addCell(row, request.age);
+
+            addCell(
+                row,
+                request.date_of_birth ||
+                request.birth_date
+            );
+
+            addCell(row, request.civil_status);
+
+            addCell(
+                row,
+                request.contact_number ||
+                request.phone_number ||
+                profile.contact_number
+            );
+
+            addCell(
+                row,
+                request.address ||
+                request.complete_address
+            );
+
+            // Request information
+            addCell(row, request.purpose);
+
+            addCell(
+                row,
+                request.request_date ||
+                request.created_at
+            );
+
+            addCell(
+                row,
+                request.status || "Pending",
+                "status"
+            );
+
+            addCell(row, request.remarks);
+
+            // Certificate download
+            const certificateCell = document.createElement("td");
+            const status = String(request.status || "").toLowerCase();
+
+            if (status === "approved" && request.document_file_path) {
+                const downloadButton = document.createElement("button");
+
+                downloadButton.type = "button";
+                downloadButton.className = "download-btn";
+                downloadButton.textContent = "Download Certificate";
+
+                downloadButton.addEventListener("click", function() {
+                    downloadCertificate(request, downloadButton);
+                });
+
+                certificateCell.appendChild(downloadButton);
+
+            } else if (status === "approved") {
+                const note = document.createElement("span");
+                note.className = "file-status";
+                note.textContent = "Certificate not uploaded yet";
+                certificateCell.appendChild(note);
+
+            } else {
+                const note = document.createElement("span");
+                note.className = "file-status";
+                note.textContent = "-";
+                certificateCell.appendChild(note);
+            }
+
+            row.appendChild(certificateCell);
+            table.appendChild(row);
+        });
+
+    } catch (error) {
+        console.error("Request error:", error);
+
+        showTableMessage(
+            "Failed to load your requests. Please try again."
+        );
+
+        alert("Unable to load requests: " + error.message);
+    }
+}
+
+loadRequests();
+</script>
+</body>
+</html>

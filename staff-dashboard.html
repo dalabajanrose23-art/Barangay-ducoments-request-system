@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Dashboard</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            color: #243447;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 35px auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 28px;
+            border-radius: 18px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 { text-align: center; margin-bottom: 10px; }
+
+        .subtitle {
+            text-align: center;
+            color: #777;
+            margin-bottom: 25px;
+        }
+
+        .table-container { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            min-width: 1370px;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+
+        th {
+            background: #176b45;
+            color: white;
+            white-space: nowrap;
+        }
+
+        tr:nth-child(even) { background: #f8f8f8; }
+
+        button {
+            padding: 9px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 3px;
+            font-size: 13px;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .approve { background: #176b45; color: white; }
+        .reject { background: #b42318; color: white; }
+        .upload { background: #175cd3; color: white; }
+
+        .file-input {
+            display: block;
+            width: 220px;
+            max-width: 100%;
+            margin: 6px 0;
+            font-size: 12px;
+        }
+
+        .resident-photo {
+            display: block;
+            width: 100px;
+            height: 120px;
+            object-fit: cover;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #f5f5f5;
+        }
+
+        .photo-cell { min-width: 125px; }
+
+        .photo-note {
+            display: block;
+            max-width: 125px;
+            color: #667085;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .logout {
+            width: 100%;
+            padding: 13px;
+            margin-top: 25px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        .message {
+            text-align: center;
+            padding: 20px;
+            color: #777;
+        }
+
+        .status { font-weight: bold; }
+        .action-cell { min-width: 250px; }
+
+        .file-note {
+            display: block;
+            color: #667085;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 600px) {
+            .container { margin: 10px auto; padding: 10px; }
+            .card { padding: 16px 10px; }
+            h1 { font-size: 23px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>Staff Dashboard</h1>
+
+            <p class="subtitle">
+                Review requests, update status, and upload completed certificates
+            </p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Resident</th>
+                            <th>Resident Photo</th>
+                            <th>Contact</th>
+                            <th>Document</th>
+                            <th>Age</th>
+                            <th>Civil Status</th>
+                            <th>Sex</th>
+                            <th>Nationality</th>
+                            <th>Complete Address</th>
+                            <th>Purpose</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Remarks</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="requestTable">
+                        <tr>
+                            <td colspan="14" class="message">
+                                Loading requests...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <button class="logout" type="button" id="logoutBtn">
+                Logout
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./supabase.js"></script>
+
+    <script>
+        const table = document.getElementById("requestTable");
+        const logoutBtn = document.getElementById("logoutBtn");
+
+        const BUCKET_NAME = "completed-documents";
+        const RESIDENT_PHOTO_BUCKET = "resident-photos";
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+        function makeCell(value) {
+            const cell = document.createElement("td");
+
+            cell.textContent =
+                value !== null && value !== undefined && value !== ""
+                    ? String(value)
+                    : "-";
+
+            return cell;
+        }
+
+        function showTableMessage(message) {
+            table.replaceChildren();
+
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+
+            cell.colSpan = 14;
+            cell.className = "message";
+            cell.textContent = message;
+
+            row.appendChild(cell);
+            table.appendChild(row);
+        }
+
+        async function requireSession() {
+            const { data, error } =
+                await supabaseClient.auth.getSession();
+
+            if (error) throw error;
+
+            if (!data.session) {
+                window.location.href = "login.html";
+
+                throw new Error(
+                    "Your session has expired. Please log in again."
+                );
+            }
+
+            return data.session;
+        }
+
+        // Supports a Storage path or an already-saved HTTP(S) image URL.
+        async function getResidentPhotoUrl(photoValue) {
+            if (!photoValue || typeof photoValue !== "string") {
+                return null;
+            }
+
+            const photoPath = photoValue.trim();
+
+            if (!photoPath) return null;
+
+            // If an existing record stores a complete URL, use it directly.
+            if (/^https?:\/\//i.test(photoPath)) {
+                return photoPath;
+            }
+
+            // New residency requests store the path in id_picture_url.
+            // Older requests may use resident_photo_path.
+            const { data, error } = await supabaseClient
+                .storage
+                .from(RESIDENT_PHOTO_BUCKET)
+                .createSignedUrl(photoPath, 3600);
+
+            if (error) {
+                console.error(
+                    "Unable to create resident photo URL:",
+                    photoPath,
+                    error
+                );
+
+                return null;
+            }
+
+            return data?.signedUrl || null;
+        }
+
+        async function displayResidentPhoto(photoCell, request) {
+            const photoPath =
+                request.id_picture_url ||
+                request.resident_photo_path ||
+                null;
+
+            if (!photoPath) {
+                const note = document.createElement("span");
+                note.className = "photo-note";
+                note.textContent =
+                    "No photo path saved for this request.";
+
+                photoCell.appendChild(note);
+                return;
+            }
+
+            const photoUrl = await getResidentPhotoUrl(photoPath);
+
+            if (!photoUrl) {
+                const note = document.createElement("span");
+                note.className = "photo-note";
+                note.textContent =
+                    "Photo unavailable. Check Storage path and permissions.";
+
+                photoCell.appendChild(note);
+                return;
+            }
+
+            const photoLink = document.createElement("a");
+            photoLink.href = photoUrl;
+            photoLink.target = "_blank";
+            photoLink.rel = "noopener noreferrer";
+            photoLink.title = "Open resident photo";
+
+            const photo = document.createElement("img");
+            photo.src = photoUrl;
+            photo.alt =
+                "2x2 ID picture of " +
+                (request.resident_name || "resident");
+            photo.className = "resident-photo";
+            photo.loading = "lazy";
+
+            photo.onerror = function () {
+                photoLink.replaceChildren();
+
+                const note = document.createElement("span");
+                note.className = "photo-note";
+                note.textContent = "Unable to display photo.";
+
+                photoLink.appendChild(note);
+            };
+
+            photoLink.appendChild(photo);
+            photoCell.appendChild(photoLink);
+
+            const photoNote = document.createElement("span");
+            photoNote.className = "photo-note";
+            photoNote.textContent = "Click photo to enlarge";
+
+            photoCell.appendChild(photoNote);
+        }
+
+        async function loadRequests() {
+            showTableMessage("Loading requests...");
+
+            try {
+                await requireSession();
+
+                const { data: requests, error } = await supabaseClient
+                    .from("document_requests")
+                    .select("*")
+                    .order("created_at", { ascending: false });
+
+                if (error) throw error;
+
+                if (!requests || requests.length === 0) {
+                    showTableMessage("No document requests found.");
+                    return;
+                }
+
+                table.replaceChildren();
+
+                for (const request of requests) {
+                    const row = document.createElement("tr");
+
+                    row.appendChild(makeCell(request.resident_name));
+
+                    // Display the uploaded 2x2 ID picture.
+                    const photoCell = document.createElement("td");
+                    photoCell.className = "photo-cell";
+
+                    await displayResidentPhoto(photoCell, request);
+
+                    row.appendChild(photoCell);
+
+                    row.appendChild(makeCell(request.contact_number));
+                    row.appendChild(makeCell(request.document_type));
+                    row.appendChild(makeCell(request.age));
+                    row.appendChild(makeCell(request.civil_status));
+                    row.appendChild(makeCell(request.sex));
+                    row.appendChild(makeCell(request.nationality));
+                    row.appendChild(makeCell(request.address));
+                    row.appendChild(makeCell(request.purpose));
+                    row.appendChild(makeCell(request.request_date));
+
+                    const statusCell = makeCell(
+                        request.status || "Pending"
+                    );
+
+                    statusCell.className = "status";
+                    row.appendChild(statusCell);
+
+                    row.appendChild(makeCell(request.remarks));
+
+                    const actionCell = document.createElement("td");
+                    actionCell.className = "action-cell";
+
+                    const currentStatus =
+                        String(request.status || "Pending").toLowerCase();
+
+                    if (
+                        currentStatus !== "approved" &&
+                        currentStatus !== "rejected"
+                    ) {
+                        const approveBtn =
+                            document.createElement("button");
+
+                        approveBtn.type = "button";
+                        approveBtn.className = "approve";
+                        approveBtn.textContent = "Approve";
+
+                        approveBtn.addEventListener("click", function () {
+                            updateStatus(request.id, "Approved");
+                        });
+
+                        actionCell.appendChild(approveBtn);
+
+                        const rejectBtn =
+                            document.createElement("button");
+
+                        rejectBtn.type = "button";
+                        rejectBtn.className = "reject";
+                        rejectBtn.textContent = "Reject";
+
+                        rejectBtn.addEventListener("click", function () {
+                            updateStatus(request.id, "Rejected");
+                        });
+
+                        actionCell.appendChild(rejectBtn);
+                    }
+
+                    if (currentStatus === "approved") {
+                        const fileLabel = document.createElement("label");
+
+                        fileLabel.textContent = request.document_file_path
+                            ? "Replace completed certificate:"
+                            : "Select completed certificate:";
+
+                        const fileInput =
+                            document.createElement("input");
+
+                        fileInput.type = "file";
+                        fileInput.accept =
+                            ".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg";
+
+                        fileInput.className = "file-input";
+
+                        const uploadBtn =
+                            document.createElement("button");
+
+                        uploadBtn.type = "button";
+                        uploadBtn.className = "upload";
+
+                        uploadBtn.textContent = request.document_file_path
+                            ? "Replace File"
+                            : "Upload Certificate";
+
+                        uploadBtn.addEventListener("click", function () {
+                            uploadCertificate(
+                                request,
+                                fileInput,
+                                uploadBtn
+                            );
+                        });
+
+                        const fileNote = document.createElement("span");
+                        fileNote.className = "file-note";
+
+                        fileNote.textContent = request.document_file_path
+                            ? "A certificate file is saved for this request."
+                            : "Allowed formats: PDF, JPG, PNG. Maximum 10 MB.";
+
+                        actionCell.appendChild(fileLabel);
+                        actionCell.appendChild(fileInput);
+                        actionCell.appendChild(uploadBtn);
+                        actionCell.appendChild(fileNote);
+                    }
+
+                    row.appendChild(actionCell);
+                    table.appendChild(row);
+                }
+
+            } catch (error) {
+                console.error("Loading requests error:", error);
+
+                showTableMessage("Failed to load requests.");
+
+                alert(
+                    "Unable to load requests: " +
+                    (error.message || "Unknown error.")
+                );
+            }
+        }
+
+        async function updateStatus(id, newStatus) {
+            let remarks = "";
+
+            if (newStatus === "Rejected") {
+                const reason = prompt(
+                    "Enter the reason for rejecting this request:"
+                );
+
+                if (reason === null) return;
+
+                remarks = reason.trim();
+
+                if (!remarks) {
+                    alert("Please enter a reason for rejection.");
+                    return;
+                }
+
+            } else {
+                if (!confirm("Approve this document request?")) return;
+
+                remarks = "Request approved.";
+            }
+
+            try {
+                await requireSession();
+
+                const { error } = await supabaseClient
+                    .from("document_requests")
+                    .update({
+                        status: newStatus,
+                        remarks: remarks
+                    })
+                    .eq("id", id);
+
+                if (error) throw error;
+
+                alert(
+                    "Request " +
+                    newStatus.toLowerCase() +
+                    " successfully!"
+                );
+
+                await loadRequests();
+
+            } catch (error) {
+                console.error("Status update error:", error);
+
+                alert(
+                    "Failed to update request: " +
+                    (error.message || "Unknown error.")
+                );
+            }
+        }
+
+        async function uploadCertificate(
+            request,
+            fileInput,
+            uploadBtn
+        ) {
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert("Please select a certificate file first.");
+                return;
+            }
+
+            const allowedTypes = [
+                "application/pdf",
+                "image/jpeg",
+                "image/png"
+            ];
+
+            if (!allowedTypes.includes(file.type)) {
+                alert("Please upload a PDF, JPG, or PNG file.");
+                return;
+            }
+
+            if (file.size > MAX_FILE_SIZE) {
+                alert("The file must be 10 MB or smaller.");
+                return;
+            }
+
+            if (
+                String(request.status || "").toLowerCase() !== "approved"
+            ) {
+                alert("Only approved requests can receive a certificate.");
+                return;
+            }
+
+            if (!confirm(
+                "Upload the completed certificate for " +
+                (request.resident_name || "this resident") + "?"
+            )) {
+                return;
+            }
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = "Uploading...";
+
+            let uploadedPath = null;
+
+            try {
+                const session = await requireSession();
+
+                console.log("Certificate upload started.");
+                console.log("Logged-in Auth user ID:", session.user.id);
+                console.log("Request ID:", request.id);
+                console.log("Storage bucket:", BUCKET_NAME);
+
+                const safeName = file.name.replace(
+                    /[^a-zA-Z0-9._-]/g,
+                    "_"
+                );
+
+                const filePath =
+                    String(request.id) + "/" +
+                    Date.now() + "_" + safeName;
+
+                // Step 1: Upload completed certificate.
+                const {
+                    data: uploadData,
+                    error: uploadError
+                } = await supabaseClient
+                    .storage
+                    .from(BUCKET_NAME)
+                    .upload(filePath, file, {
+                        cacheControl: "3600",
+                        upsert: false,
+                        contentType: file.type
+                    });
+
+                if (uploadError) {
+                    console.error(
+                        "SUPABASE STORAGE UPLOAD ERROR:",
+                        uploadError
+                    );
+
+                    throw new Error(
+                        "STORAGE_UPLOAD_FAILED\n" +
+                        JSON.stringify({
+                            message: uploadError.message,
+                            error: uploadError.error,
+                            status: uploadError.status,
+                            statusCode: uploadError.statusCode,
+                            name: uploadError.name
+                        }, null, 2)
+                    );
+                }
+
+                uploadedPath = uploadData.path;
+
+                console.log(
+                    "Certificate uploaded. Storage path:",
+                    uploadedPath
+                );
+
+                // Step 2: Save uploaded path in the database.
+                const {
+                    data: updatedRequest,
+                    error: updateError
+                } = await supabaseClient
+                    .from("document_requests")
+                    .update({
+                        document_file_path: uploadedPath
+                    })
+                    .eq("id", request.id)
+                    .select("id, document_file_path")
+                    .maybeSingle();
+
+                if (updateError) {
+                    console.error(
+                        "DATABASE PATH UPDATE ERROR:",
+                        updateError
+                    );
+
+                    throw new Error(
+                        "STORAGE_UPLOAD_SUCCEEDED_BUT_DATABASE_UPDATE_FAILED\n" +
+                        JSON.stringify({
+                            message: updateError.message,
+                            code: updateError.code,
+                            details: updateError.details,
+                            hint: updateError.hint
+                        }, null, 2) +
+                        "\nUploaded file path: " + uploadedPath
+                    );
+                }
+
+                if (!updatedRequest) {
+                    throw new Error(
+                        "The file was uploaded, but no request record " +
+                        "was updated. Check the UPDATE policy for " +
+                        "document_requests. Uploaded file path: " +
+                        uploadedPath
+                    );
+                }
+
+                console.log("Certificate path saved successfully.");
+
+                alert("Certificate uploaded successfully!");
+
+                await loadRequests();
+
+            } catch (error) {
+                console.error(
+                    "CERTIFICATE UPLOAD PROCESS ERROR:",
+                    error
+                );
+
+                const errorText = error.message || String(error);
+
+                if (
+                    errorText.includes(
+                        "STORAGE_UPLOAD_SUCCEEDED_BUT_DATABASE_UPDATE_FAILED"
+                    )
+                ) {
+                    alert(
+                        "The certificate was uploaded to Storage, " +
+                        "but the database could not save its path.\n\n" +
+                        errorText
+                    );
+                } else {
+                    alert(
+                        "Unable to upload the certificate.\n\n" +
+                        "Please send me a screenshot of this complete error:\n\n" +
+                        errorText
+                    );
+                }
+
+                uploadBtn.disabled = false;
+
+                uploadBtn.textContent = request.document_file_path
+                    ? "Replace File"
+                    : "Upload Certificate";
+            }
+        }
+
+        logoutBtn.addEventListener("click", async function () {
+            try {
+                const { error } =
+                    await supabaseClient.auth.signOut();
+
+                if (error) throw error;
+
+                window.location.href = "login.html";
+
+            } catch (error) {
+                alert(
+                    "Unable to log out: " +
+                    (error.message || "Unknown error.")
+                );
+            }
+        });
+
+        loadRequests();
+    </script>
+</body>
+</html>
